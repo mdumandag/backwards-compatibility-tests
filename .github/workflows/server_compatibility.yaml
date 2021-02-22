@@ -23,20 +23,19 @@ jobs:
           repository: hazelcast/hazelcast
           path: hazelcast
           ref: ${{ github.event.inputs.branch_name }}
-      - name: Go to Hazelcast directory
-        run: cd $GITHUB_WORKSPACE/hazelcast
       - name: Build JARs
         run: mvn clean install -DskipTests=True
+        working-directory: $GITHUB_WORKSPACE/hazelcast
       - name: Upload Hazelcast JAR
         uses: actions/upload-artifact@v2
         with:
           name: hazelcast
-          path: hazelcast/target/hazelcast-!(*-tests|*-sources).jar
+          path: $GITHUB_WORKSPACE/hazelcast/hazelcast/target/hazelcast-!(*-tests|*-sources).jar
       - name: Upload Hazelcast tests JAR
         uses: actions/upload-artifact@v2
         with:
           name: hazelcast-tests
-          path: hazelcast/target/hazelcast-*-tests.jar
+          path: $GITHUB_WORKSPACE/hazelcast/hazelcast/target/hazelcast-*-tests.jar
   setup_python_client_matrix:
     name: Setup the Python client test matrix
     runs-on: ubuntu-latest
@@ -61,6 +60,7 @@ jobs:
         server: [os]
     name: Test Python client ${{ matrix.tag }}
     steps:
+      - uses: actions/checkout@v2
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
@@ -69,10 +69,6 @@ jobs:
         uses: actions/setup-java@v1
         with:
           java-version: 8
-      - name: Checkout to scripts
-        uses: actions/checkout@v2
-        with:
-          path: scripts
       - name: Checkout to master
         uses: actions/checkout@v2
         with:
@@ -89,25 +85,25 @@ jobs:
         run: |
           rm -rf $GITHUB_WORKSPACE/tag/tests/backwards_compatibility
           cp -a $GITHUB_WORKSPACE/master/tests/backwards_compatibility $GITHUB_WORKSPACE/tag/tests/backwards_compatibility
-      - name: Go to tag
-        run: cd $GITHUB_WORKSPACE/tag
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-test.txt
+        working-directory: $GITHUB_WORKSPACE/tag
       - name: Download Hazelcast tests JAR
         uses: actions/download-artifact@v2
         with:
           name: hazelcast-tests
-          path: jars
+          path: $GITHUB_WORKSPACE/jars
       - name: Download Hazelcast JAR
         if: ${{ matrix.server == 'os' }}
         uses: actions/download-artifact@v2
         with:
           name: hazelcast
-          path: jars
+          path: $GITHUB_WORKSPACE/jars
       - name: Start RC
-        run: python $GITHUB_WORKSPACE/scripts/start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars
+        run: python $GITHUB_WORKSPACE/start_rc.py --rc-version '0.8-SNAPSHOT' --jars $GITHUB_WORKSPACE/jars
       - name: Run tests for the ${{ matrix.server }} server
         if: ${{ matrix.server == 'os' }}
         run: nosetests -v --nologcapture tests/backwards_compatibility -A 'not enterprise'
+        working-directory: $GITHUB_WORKSPACE/tag
