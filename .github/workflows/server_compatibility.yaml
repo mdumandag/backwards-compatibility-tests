@@ -23,10 +23,6 @@ jobs:
           repository: hazelcast/hazelcast
           path: hazelcast
           ref: ${{ github.event.inputs.branch_name }}
-      - name: Echo pwd
-        run: pwd
-      - name: Echo more
-        run: ls -l
       - name: Build JARs
         run: mvn clean install -DskipTests=True
         working-directory: hazelcast
@@ -34,15 +30,17 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: hazelcast
-          path: $GITHUB_WORKSPACE/hazelcast/hazelcast/target/hazelcast-!(*-tests|*-sources).jar
+          path: hazelcast/target/hazelcast-!(*-tests|*-sources).jar
       - name: Upload Hazelcast tests JAR
         uses: actions/upload-artifact@v2
         with:
           name: hazelcast-tests
-          path: $GITHUB_WORKSPACE/hazelcast/hazelcast/target/hazelcast-*-tests.jar
+          path: hazelcast/target/hazelcast-*-tests.jar
   setup_python_client_matrix:
     name: Setup the Python client test matrix
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -52,9 +50,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Set client matrix
         id: set-matrix
-        run: echo '::set-output name=matrix::$(python get_client_matrix.py --client py)'
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+        run: echo "::set-output name=matrix::$( python get_client_matrix.py --client py )"
   test_python_clients:
     needs: [upload_jars, setup_python_client_matrix]
     runs-on: ubuntu-latest
