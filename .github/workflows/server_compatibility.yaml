@@ -23,9 +23,13 @@ jobs:
           repository: hazelcast/hazelcast
           path: hazelcast
           ref: ${{ github.event.inputs.branch_name }}
+      - name: Echo pwd
+        run: pwd
+      - name: Echo more
+        run: ls -l
       - name: Build JARs
         run: mvn clean install -DskipTests=True
-        working-directory: $GITHUB_WORKSPACE/hazelcast
+        working-directory: hazelcast
       - name: Upload Hazelcast JAR
         uses: actions/upload-artifact@v2
         with:
