@@ -23,6 +23,8 @@ jobs:
           repository: hazelcast/hazelcast
           path: hazelcast
           ref: ${{ github.event.inputs.branch_name }}
+      - name: Go to Hazelcast directory
+        run: cd $GITHUB_WORKSPACE/hazelcast
       - name: Build JARs
         run: mvn clean install -DskipTests=True
       - name: Upload Hazelcast JAR
@@ -87,6 +89,8 @@ jobs:
         run: |
           rm -rf $GITHUB_WORKSPACE/tag/tests/backwards_compatibility
           cp -a $GITHUB_WORKSPACE/master/tests/backwards_compatibility $GITHUB_WORKSPACE/tag/tests/backwards_compatibility
+      - name: Go to tag
+        run: cd $GITHUB_WORKSPACE/tag
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
