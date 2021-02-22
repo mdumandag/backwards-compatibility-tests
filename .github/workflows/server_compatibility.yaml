@@ -1,0 +1,109 @@
+name: Test Server Backwards Compatibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: Name of the branch to build JARs from
+        required: true
+        default: master
+
+jobs:
+  upload_jars:
+    name: Create and upload JARs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Java 8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 8
+      - name: Checkout to Hazelcast
+        uses: actions/checkout@v2
+        with:
+          repository: hazelcast/hazelcast
+          path: hazelcast
+          ref: ${{ github.event.inputs.branch_name }}
+      - name: Build JARs
+        run: mvn clean install -DskipTests=True
+      - name: Upload Hazelcast JAR
+        uses: actions/upload-artifact@v2
+        with:
+          name: hazelcast
+          path: hazelcast/target/hazelcast-!(*-tests|*-sources).jar
+      - name: Upload Hazelcast tests JAR
+        uses: actions/upload-artifact@v2
+        with:
+          name: hazelcast-tests
+          path: hazelcast/target/hazelcast-*-tests.jar
+  setup_python_client_matrix:
+    name: Setup the Python client test matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Checkout to scripts
+        uses: actions/checkout@v2
+      - name: Set client matrix
+        id: set-matrix
+        run: echo '::set-output name=matrix::$(python get_client_matrix.py --client py)'
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+  test_python_clients:
+    needs: [upload_jars, setup_python_client_matrix]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tag: ${{ fromJson(needs.setup_python_client_matrix.outputs.matrix) }}
+        server: [os]
+    name: Test Python client ${{ matrix.tag }}
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Setup Java 8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 8
+      - name: Checkout to scripts
+        uses: actions/checkout@v2
+        with:
+          path: scripts
+      - name: Checkout to master
+        uses: actions/checkout@v2
+        with:
+          repository: mdumandag/hazelcast-python-client
+          path: master
+          ref: bc
+      - name: Checkout to tag
+        uses: actions/checkout@v2
+        with:
+          repository: hazelcast/hazelcast-python-client
+          path: tag
+          ref: ${{ matrix.tag }}
+      - name: Copy latest compatibility test
+        run: |
+          rm -rf $GITHUB_WORKSPACE/tag/tests/backwards_compatibility
+          cp -a $GITHUB_WORKSPACE/master/tests/backwards_compatibility $GITHUB_WORKSPACE/tag/tests/backwards_compatibility
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-test.txt
+      - name: Download Hazelcast tests JAR
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast-tests
+          path: jars
+      - name: Download Hazelcast JAR
+        if: ${{ matrix.server == 'os' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast
+          path: jars
+      - name: Start RC
+        run: python $GITHUB_WORKSPACE/scripts/start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars
+      - name: Run tests for the ${{ matrix.server }} server
+        if: ${{ matrix.server == 'os' }}
+        run: nosetests -v --nologcapture tests/backwards_compatibility -A 'not enterprise'
