@@ -30,12 +30,12 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: hazelcast
-          path: hazelcast/target/hazelcast-!(*-tests|*-sources).jar
+          path: hazelcast/hazelcast/target/hazelcast-!(*-tests|*-sources).jar
       - name: Upload Hazelcast tests JAR
         uses: actions/upload-artifact@v2
         with:
           name: hazelcast-tests
-          path: hazelcast/target/hazelcast-*-tests.jar
+          path: hazelcast/hazelcast/target/hazelcast-*-tests.jar
   setup_python_client_matrix:
     name: Setup the Python client test matrix
     runs-on: ubuntu-latest
@@ -89,21 +89,21 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-test.txt
-        working-directory: $GITHUB_WORKSPACE/tag
+        working-directory: tag
       - name: Download Hazelcast tests JAR
         uses: actions/download-artifact@v2
         with:
           name: hazelcast-tests
-          path: $GITHUB_WORKSPACE/jars
+          path: jars
       - name: Download Hazelcast JAR
         if: ${{ matrix.server == 'os' }}
         uses: actions/download-artifact@v2
         with:
           name: hazelcast
-          path: $GITHUB_WORKSPACE/jars
+          path: jars
       - name: Start RC
-        run: python $GITHUB_WORKSPACE/start_rc.py --rc-version '0.8-SNAPSHOT' --jars $GITHUB_WORKSPACE/jars
+        run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars
       - name: Run tests for the ${{ matrix.server }} server
         if: ${{ matrix.server == 'os' }}
         run: nosetests -v --nologcapture tests/backwards_compatibility -A 'not enterprise'
-        working-directory: $GITHUB_WORKSPACE/tag
+        working-directory: tag
