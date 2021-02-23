@@ -30,7 +30,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: hazelcast
-          path: hazelcast/hazelcast/target/hazelcast-!(*-tests|*-sources).jar
+          path: hazelcast/hazelcast/target/hazelcast-*[!s].jar
       - name: Upload Hazelcast tests JAR
         uses: actions/upload-artifact@v2
         with:
