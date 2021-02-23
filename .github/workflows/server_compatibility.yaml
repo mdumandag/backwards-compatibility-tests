@@ -82,7 +82,7 @@ jobs:
       matrix:
         tag: ${{ fromJson(needs.setup_python_client_matrix.outputs.matrix) }}
         server: [os, enterprise]
-    name: Test Python client ${{ matrix.tag }}
+    name: Test Python client ${{ matrix.tag }} with ${{ matrix.server }} server
     steps:
       - uses: actions/checkout@v2
       - name: Setup Python
@@ -138,18 +138,14 @@ jobs:
           name: hazelcast-enterprise-tests
           path: jars
       - name: Start RC
-        if: ${{ matrix.server == 'os' }}
-        run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars --use-simple-server
-      - name: Start RC
-        if: ${{ matrix.server == 'enterprise' }}
         env:
           HAZELCAST_ENTERPRISE_KEY: ${{ secrets.HAZELCAST_ENTERPRISE_KEY }}
-        run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars --use-simple-server
-      - name: Run tests
+        run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars --server-kind ${{ matrix.server }} --use-simple-server
+      - name: Run non-enterprise tests
         if: ${{ matrix.server == 'os' }}
         run: nosetests -v --nologcapture tests/backwards_compatibility -A 'not enterprise'
         working-directory: tag
-      - name: Run tests
+      - name: Run all tests
         if: ${{ matrix.server == 'enterprise' }}
         run: nosetests -v --nologcapture tests/backwards_compatibility
         working-directory: tag

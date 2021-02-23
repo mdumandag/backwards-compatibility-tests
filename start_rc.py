@@ -1,9 +1,15 @@
 import argparse
 import os
 import subprocess
+from enum import Enum
 from os import path
 
 from util import SNAPSHOT_REPO, RELEASE_REPO, download_via_maven, IS_ON_WINDOWS
+
+
+class ServerKind(Enum):
+    OS = "os"
+    ENTERPRISE = "enterprise"
 
 
 def parse_args():
@@ -28,6 +34,16 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--server-kind",
+        dest="server_kind",
+        action="store",
+        type=str,
+        required=True,
+        choices=[kind.value for kind in ServerKind],
+        help="The Hazelcast server type that the tests should be running for",
+    )
+
+    parser.add_argument(
         "--use-simple-server",
         dest="use_simple_server",
         action="store_true",
@@ -39,7 +55,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def start_rc(rc_version: str, dst_folder: str, use_simple_server: bool):
+def start_rc(rc_version: str, dst_folder: str, use_simple_server: bool, server_kind: ServerKind):
     if rc_version.upper().endswith("-SNAPSHOT"):
         rc_repo = SNAPSHOT_REPO
     else:
@@ -59,7 +75,7 @@ def start_rc(rc_version: str, dst_folder: str, use_simple_server: bool):
         args.append("--use-simple-server")
 
     enterprise_key = os.environ.get("HAZELCAST_ENTERPRISE_KEY", None)
-    if enterprise_key:
+    if server_kind == ServerKind.ENTERPRISE and enterprise_key:
         args.insert(1, "-Dhazelcast.enterprise.license.key=" + enterprise_key)
 
     rc_stdout = open("rc_stdout.log", "w")
@@ -74,5 +90,6 @@ if __name__ == "__main__":
     args = parse_args()
     rc_version = args.rc_version
     jars = args.jars
+    server_kind = ServerKind(args.server_kind)
     use_simple_server = args.use_simple_server
-    start_rc(rc_version, jars, use_simple_server)
+    start_rc(rc_version, jars, use_simple_server, server_kind)
