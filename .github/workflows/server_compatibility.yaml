@@ -102,7 +102,7 @@ jobs:
           name: hazelcast
           path: jars
       - name: Start RC
-        run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars
+        run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars --use-simple-server
       - name: Run tests for the ${{ matrix.server }} server
         if: ${{ matrix.server == 'os' }}
         run: nosetests -v --nologcapture tests/backwards_compatibility -A 'not enterprise'
