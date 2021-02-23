@@ -62,8 +62,8 @@ def start_rc(rc_version: str, dst_folder: str, use_simple_server: bool):
     if enterprise_key:
         args.insert(1, "-Dhazelcast.enterprise.license.key=" + enterprise_key)
 
-    rc_stdout = open("ignore/rc_stdout.log", "w")
-    rc_stderr = open("ignore/rc_stderr.log", "w")
+    rc_stdout = open("rc_stdout.log", "w")
+    rc_stderr = open("rc_stderr.log", "w")
 
     return subprocess.Popen(
         args=args, stdout=rc_stdout, stderr=rc_stderr, shell=IS_ON_WINDOWS
