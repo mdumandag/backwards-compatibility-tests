@@ -251,11 +251,11 @@ jobs:
         run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars --server-kind ${{ matrix.server }} --use-simple-server
       - name: Run non-enterprise tests
         if: ${{ matrix.server == 'os' }}
-        run: mocha --recursive test/integration/backward_compatible
+        run: node node_modules/mocha/bin/mocha --recursive test/integration/backward_compatible
         working-directory: master
       - name: Run all tests
         if: ${{ matrix.server == 'enterprise' }}
-        run: mocha --recursive test/integration/backward_compatible
+        run: node node_modules/mocha/bin/mocha --recursive test/integration/backward_compatible
         working-directory: master
         env:
           HAZELCAST_ENTERPRISE_KEY: ${{ secrets.HAZELCAST_ENTERPRISE_KEY }}
