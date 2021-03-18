@@ -7,13 +7,20 @@ on:
         description: Name of the branch to build JARs from
         required: true
         default: master
-
+      run_python:
+        description: Whether or not to run Python client tests.
+        required: true
+        default: true
+      run_nodejs:
+        description: Whether or not to run Node.js client tests.
+        required: true
+        default: true
 jobs:
   upload_jars:
     name: Create and upload JARs
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Java 8
+      - name: Setup Java
         uses: actions/setup-java@v1
         with:
           java-version: 8
@@ -62,6 +69,7 @@ jobs:
           retention-days: 1
   setup_python_client_matrix:
     name: Setup the Python client test matrix
+    if: ${{ github.event.inputs.run_python == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -89,31 +97,31 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.9
-      - name: Setup Java 8
+      - name: Setup Java
         uses: actions/setup-java@v1
         with:
           java-version: 8
       - name: Checkout to master
         uses: actions/checkout@v2
         with:
-          repository: mdumandag/hazelcast-python-client
+          repository: hazelcast/hazelcast-python-client
           path: master
-          ref: bc
+          ref: master
       - name: Checkout to tag
         uses: actions/checkout@v2
         with:
           repository: hazelcast/hazelcast-python-client
           path: tag
           ref: ${{ matrix.tag }}
-      - name: Copy latest compatibility test
+      - name: Copy the client code into master
         run: |
-          rm -rf $GITHUB_WORKSPACE/tag/tests/backwards_compatibility
-          cp -a $GITHUB_WORKSPACE/master/tests/backwards_compatibility $GITHUB_WORKSPACE/tag/tests/backwards_compatibility
+          rm -rf $GITHUB_WORKSPACE/master/hazelcast
+          cp -a $GITHUB_WORKSPACE/tag/hazelcast $GITHUB_WORKSPACE/master/hazelcast
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-test.txt
-        working-directory: tag
+        working-directory: master
       - name: Download Hazelcast tests JAR
         uses: actions/download-artifact@v2
         with:
@@ -143,9 +151,111 @@ jobs:
         run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars --server-kind ${{ matrix.server }} --use-simple-server
       - name: Run non-enterprise tests
         if: ${{ matrix.server == 'os' }}
-        run: nosetests -v --nologcapture tests/backwards_compatibility -A 'not enterprise'
-        working-directory: tag
+        run: nosetests -v tests/integration/backward_compatible -A 'not enterprise'
+        working-directory: master
       - name: Run all tests
         if: ${{ matrix.server == 'enterprise' }}
-        run: nosetests -v --nologcapture tests/backwards_compatibility
+        run: nosetests -v tests/integration/backward_compatible
+        working-directory: master
+  setup_nodejs_client_matrix:
+    name: Setup the Node.js client test matrix
+    if: ${{ github.event.inputs.run_nodejs == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Checkout to scripts
+        uses: actions/checkout@v2
+      - name: Set client matrix
+        id: set-matrix
+        run: echo "::set-output name=matrix::$( python get_client_matrix.py --client node )"
+  test_nodejs_clients:
+    needs: [upload_jars, setup_nodejs_client_matrix]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tag: ${{ fromJson(needs.setup_nodejs_client_matrix.outputs.matrix) }}
+        server: [os, enterprise]
+    name: Test Node.js client ${{ matrix.tag }} with ${{ matrix.server }} server
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+      - name: Setup Java
+        uses: actions/setup-java@v1
+        with:
+          java-version: 8
+      - name: Checkout to master
+        uses: actions/checkout@v2
+        with:
+          repository: mdumandag/hazelcast-nodejs-client
+          path: master
+          ref: backward-compatibility
+      - name: Checkout to tag
+        uses: actions/checkout@v2
+        with:
+          repository: hazelcast/hazelcast-nodejs-client
+          path: tag
+          ref: ${{ matrix.tag }}
+      - name: Install dependencies and compile client
+        run: |
+          npm install
+          npm run compile
         working-directory: tag
+      - name: Install test dependencies
+        run: |
+          npm install
+        working-directory: master
+      - name: Copy client code into master
+        run: |
+          rm -rf $GITHUB_WORKSPACE/master/lib
+          rm $GITHUB_WORKSPACE/master/package.json
+          cp -a $GITHUB_WORKSPACE/tag/lib $GITHUB_WORKSPACE/master/lib
+          cp -a $GITHUB_WORKSPACE/tag/package.json $GITHUB_WORKSPACE/master/package.json
+      - name: Download Hazelcast tests JAR
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast-tests
+          path: jars
+      - name: Download Hazelcast JAR
+        if: ${{ matrix.server == 'os' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast
+          path: jars
+      - name: Download Hazelcast Enterprise JAR
+        if: ${{ matrix.server == 'enterprise' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast-enterprise
+          path: jars
+      - name: Download Hazelcast Enterprise tests JAR
+        if: ${{ matrix.server == 'enterprise' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast-enterprise-tests
+          path: jars
+      - name: Start RC
+        env:
+          HAZELCAST_ENTERPRISE_KEY: ${{ secrets.HAZELCAST_ENTERPRISE_KEY }}
+        run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars --server-kind ${{ matrix.server }} --use-simple-server
+      - name: Run non-enterprise tests
+        if: ${{ matrix.server == 'os' }}
+        run: mocha --recursive test/integration/backward_compatible
+        working-directory: master
+      - name: Run all tests
+        if: ${{ matrix.server == 'enterprise' }}
+        run: mocha --recursive test/integration/backward_compatible
+        working-directory: master
+        env:
+          HAZELCAST_ENTERPRISE_KEY: ${{ secrets.HAZELCAST_ENTERPRISE_KEY }}
