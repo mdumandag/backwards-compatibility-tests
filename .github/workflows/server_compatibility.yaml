@@ -87,6 +87,7 @@ jobs:
     needs: [upload_jars, setup_python_client_matrix]
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         tag: ${{ fromJson(needs.setup_python_client_matrix.outputs.matrix) }}
         server: [os, enterprise]
@@ -177,6 +178,7 @@ jobs:
     needs: [upload_jars, setup_nodejs_client_matrix]
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         tag: ${{ fromJson(needs.setup_nodejs_client_matrix.outputs.matrix) }}
         server: [os, enterprise]
