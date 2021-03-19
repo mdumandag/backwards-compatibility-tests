@@ -1,0 +1,168 @@
+name: Node
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: Name of the branch to build JARs from
+        required: true
+        default: master
+      run_nodejs:
+        description: Whether or not to run Node.js client tests.
+        required: true
+        default: true
+jobs:
+  upload_jars:
+    name: Create and upload JARs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v1
+        with:
+          java-version: 8
+      - name: Checkout to Hazelcast
+        uses: actions/checkout@v2
+        with:
+          repository: hazelcast/hazelcast
+          path: hazelcast
+          ref: ${{ github.event.inputs.branch_name }}
+      - name: Checkout to Hazelcast Enterprise
+        uses: actions/checkout@v2
+        with:
+          repository: hazelcast/hazelcast-enterprise
+          path: hazelcast-enterprise
+          ref: ${{ github.event.inputs.branch_name }}
+          token: ${{ secrets.PAT }}
+      - name: Build JARs
+        run: mvn clean install -DskipTests=True
+        working-directory: hazelcast
+      - name: Build Enterprise JARs
+        run: mvn clean install -DskipTests=True
+        working-directory: hazelcast-enterprise
+      - name: Upload Hazelcast JAR
+        uses: actions/upload-artifact@v2
+        with:
+          name: hazelcast
+          path: hazelcast/hazelcast/target/hazelcast-*[!s].jar
+          retention-days: 1
+      - name: Upload Hazelcast tests JAR
+        uses: actions/upload-artifact@v2
+        with:
+          name: hazelcast-tests
+          path: hazelcast/hazelcast/target/hazelcast-*-tests.jar
+          retention-days: 1
+      - name: Upload Hazelcast Enterprise JAR
+        uses: actions/upload-artifact@v2
+        with:
+          name: hazelcast-enterprise
+          path: hazelcast-enterprise/hazelcast-enterprise/target/hazelcast-enterprise-*[!s].jar
+          retention-days: 1
+      - name: Upload Hazelcast Enterprise tests JAR
+        uses: actions/upload-artifact@v2
+        with:
+          name: hazelcast-enterprise-tests
+          path: hazelcast-enterprise/hazelcast-enterprise/target/hazelcast-enterprise-*-tests.jar
+          retention-days: 1
+  setup_nodejs_client_matrix:
+    name: Setup the Node.js client test matrix
+    if: ${{ github.event.inputs.run_nodejs == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Checkout to scripts
+        uses: actions/checkout@v2
+      - name: Set client matrix
+        id: set-matrix
+        run: echo "::set-output name=matrix::$( python get_client_matrix.py --client node )"
+  test_nodejs_clients:
+    needs: [upload_jars, setup_nodejs_client_matrix]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: [v4.0.0]
+        server: [enterprise]
+    name: Test Node.js client ${{ matrix.tag }} with ${{ matrix.server }} server
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+      - name: Setup Java
+        uses: actions/setup-java@v1
+        with:
+          java-version: 8
+      - name: Checkout to master
+        uses: actions/checkout@v2
+        with:
+          repository: mdumandag/hazelcast-nodejs-client
+          path: master
+          ref: backward-compatibility
+      - name: Checkout to tag
+        uses: actions/checkout@v2
+        with:
+          repository: hazelcast/hazelcast-nodejs-client
+          path: tag
+          ref: ${{ matrix.tag }}
+      - name: Install dependencies and compile client
+        run: |
+          npm install
+          npm run compile
+        working-directory: tag
+      - name: Install test dependencies
+        run: |
+          npm install
+        working-directory: master
+      - name: Copy client code into master
+        run: |
+          rm -rf $GITHUB_WORKSPACE/master/lib
+          rm $GITHUB_WORKSPACE/master/package.json
+          cp -a $GITHUB_WORKSPACE/tag/lib $GITHUB_WORKSPACE/master/lib
+          cp -a $GITHUB_WORKSPACE/tag/package.json $GITHUB_WORKSPACE/master/package.json
+      - name: Download Hazelcast tests JAR
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast-tests
+          path: jars
+      - name: Download Hazelcast JAR
+        if: ${{ matrix.server == 'os' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast
+          path: jars
+      - name: Download Hazelcast Enterprise JAR
+        if: ${{ matrix.server == 'enterprise' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast-enterprise
+          path: jars
+      - name: Download Hazelcast Enterprise tests JAR
+        if: ${{ matrix.server == 'enterprise' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: hazelcast-enterprise-tests
+          path: jars
+      - name: Start RC
+        env:
+          HAZELCAST_ENTERPRISE_KEY: ${{ secrets.HAZELCAST_ENTERPRISE_KEY }}
+        run: python start_rc.py --rc-version '0.8-SNAPSHOT' --jars jars --server-kind ${{ matrix.server }} --use-simple-server
+      - name: Run non-enterprise tests
+        if: ${{ matrix.server == 'os' }}
+        run: node node_modules/mocha/bin/mocha --recursive test/integration/backward_compatible
+        working-directory: master
+      - name: Run all tests
+        if: ${{ matrix.server == 'enterprise' }}
+        run: node node_modules/mocha/bin/mocha --recursive test/integration/backward_compatible
+        working-directory: master
+        env:
+          HAZELCAST_ENTERPRISE_KEY: ${{ secrets.HAZELCAST_ENTERPRISE_KEY }}
