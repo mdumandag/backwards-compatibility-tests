@@ -1,6 +1,9 @@
 import argparse
 import os
+import socket
 import subprocess
+import time
+from contextlib import closing
 from enum import Enum
 from os import path
 
@@ -86,6 +89,18 @@ def start_rc(rc_version: str, dst_folder: str, use_simple_server: bool, server_k
     )
 
 
+def wait_until_rc_is_ready():
+    timeout = 300 + time.time()
+    while time.time() < timeout:
+        with closing(socket.socket()) as sock:
+            if sock.connect_ex(("localhost", 9701)) == 0:
+                return
+            print("Remote controller is not ready yet. Sleeping 1 second.")
+            time.sleep(1)
+
+    raise Exception("Remote controller failed to start.")
+
+
 if __name__ == "__main__":
     args = parse_args()
     rc_version = args.rc_version
@@ -93,3 +108,4 @@ if __name__ == "__main__":
     server_kind = ServerKind(args.server_kind)
     use_simple_server = args.use_simple_server
     start_rc(rc_version, jars, use_simple_server, server_kind)
+    wait_until_rc_is_ready()
