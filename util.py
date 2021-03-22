@@ -8,7 +8,7 @@ import urllib.request
 from abc import ABC, abstractmethod
 from enum import Enum
 from os import path
-from typing import List
+from typing import List, Dict, Callable
 from urllib.parse import urlparse
 
 # Slightly modified version of
@@ -41,6 +41,8 @@ TAG_ATTRIBUTE = "Github"
 IMDG_CLIENTS = (
     "https://raw.githubusercontent.com/hazelcast/rel-scripts/master/imdg-clients.txt"
 )
+IMDG_SERVERS = "https://raw.githubusercontent.com/hazelcast/rel-scripts/master/imdg-open-source.txt"
+
 CLIENT_HEADER = "======= %s Client\n---\n(.*?)\n---\n==="
 
 RELEASE_REPO = "http://repo1.maven.apache.org/maven2"
@@ -54,6 +56,7 @@ CLASS_PATH_SEPARATOR = ";" if IS_ON_WINDOWS else ":"
 
 class Version:
     def __init__(self, version: str):
+        self.version_str = version
         m = re.match(VERSION_PATTERN, version)
         if not m:
             raise ValueError("Cannot parse %s version" % version)
@@ -85,6 +88,11 @@ class ClientKind(Enum):
     GO = "Go"
 
 
+class MatrixOptionKind(Enum):
+    TAG = 0
+    VERSION = 1
+
+
 class ClientRelease:
     def __init__(self, kind: ClientKind, version: str, tag: str):
         self.kind = kind
@@ -105,15 +113,40 @@ class ReleaseFilter(ABC):
         pass
 
 
-class V4ReleaseFilter(ReleaseFilter):
+class MajorVersionFilter(ReleaseFilter):
+    def __init__(self, major_versions: List[int]):
+        self._versions = frozenset(major_versions)
+
     def filter(self, release: ClientRelease) -> bool:
-        return release.version.major == 4
+        return release.version.major in self._versions
 
 
 class StableReleaseFilter(ReleaseFilter):
     def filter(self, release: ClientRelease) -> bool:
         return release.version.stable
 
+
+CURRENT_STABLE_SERVER_PATTERN = re.compile("========== Current Stable\n---\n(.*?)\n---", re.DOTALL)
+PREVIOUS_STABLE_SERVER_PATTERN = re.compile("========== Previous Stable\n---\n(.*?)\n---\n========== Development: SHOW", re.DOTALL)
+
+
+class ServerReleaseParser:
+    def __init__(self, filters: List[ReleaseFilter]):
+        self._filters = filters
+
+    def get_all_releases(self):
+        with urllib.request.urlopen(IMDG_SERVERS) as r:
+            raw_data = r.read().decode()
+
+        stable_match = re.search(CURRENT_STABLE_SERVER_PATTERN, raw_data)
+        if not stable_match:
+            raise ValueError("Cannot find a match on the server data "
+                             "located at %s for the current stable version." % IMDG_SERVERS)
+
+        previous_match = re.search(PREVIOUS_STABLE_SERVER_PATTERN, raw_data)
+        if not previous_match:
+            raise ValueError("Cannot find a match on the server data "
+                             "located at %s for the previous stable versions." % IMDG_SERVERS)
 
 class ClientReleaseParser:
     def __init__(self, kind: ClientKind, filters: List[ReleaseFilter]):
@@ -170,13 +203,27 @@ class ClientReleaseParser:
         return all_releases
 
 
-def get_tag(release: ClientRelease):
+def get_tag(release: ClientRelease) -> str:
     pr = urlparse(release.tag)
 
     head, tail = path.split(pr.path)
     while not tail:
         head, tail = path.split(head)
     return tail
+
+
+def get_version(release: ClientRelease) -> str:
+    return release.version.version_str
+
+
+MATRIX_OPTION_KIND_TO_GETTER: Dict[MatrixOptionKind, Callable[[ClientRelease], str]] = {
+    MatrixOptionKind.TAG: get_tag,
+    MatrixOptionKind.VERSION: get_version,
+}
+
+
+def get_option_from_release(release: ClientRelease, option: MatrixOptionKind) -> str:
+    return MATRIX_OPTION_KIND_TO_GETTER[option](release)
 
 
 def download_via_maven(
