@@ -11,7 +11,7 @@ from util import (
 )
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Returns the client matrix for the selected option as a JSON array"
     )
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     matrix_option_kind = MatrixOptionKind[args.option.upper()]
 
     filters = [
-        MajorVersionFilter([4, 5]),
+        MajorVersionFilter([4]),
         StableReleaseFilter(),
     ]
     client_release_parser = ClientReleaseParser(client_kind, filters)

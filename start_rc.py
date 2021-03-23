@@ -4,18 +4,18 @@ import socket
 import subprocess
 import time
 from contextlib import closing
-from enum import Enum
 from os import path
 
-from util import SNAPSHOT_REPO, RELEASE_REPO, download_via_maven, IS_ON_WINDOWS
+from util import (
+    SNAPSHOT_REPO,
+    RELEASE_REPO,
+    download_via_maven,
+    IS_ON_WINDOWS,
+    ServerKind,
+)
 
 
-class ServerKind(Enum):
-    OS = "os"
-    ENTERPRISE = "enterprise"
-
-
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Starts the remote controller")
 
     parser.add_argument(
@@ -42,7 +42,7 @@ def parse_args():
         action="store",
         type=str,
         required=True,
-        choices=[kind.value for kind in ServerKind],
+        choices=[kind.name.lower() for kind in ServerKind],
         help="The Hazelcast server type that the tests should be running for",
     )
 
@@ -58,7 +58,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def start_rc(rc_version: str, dst_folder: str, use_simple_server: bool, server_kind: ServerKind):
+def start_rc(
+    rc_version: str, dst_folder: str, use_simple_server: bool, server_kind: ServerKind
+) -> None:
     if rc_version.upper().endswith("-SNAPSHOT"):
         rc_repo = SNAPSHOT_REPO
     else:
@@ -84,12 +86,10 @@ def start_rc(rc_version: str, dst_folder: str, use_simple_server: bool, server_k
     rc_stdout = open("rc_stdout.log", "w")
     rc_stderr = open("rc_stderr.log", "w")
 
-    return subprocess.Popen(
-        args=args, stdout=rc_stdout, stderr=rc_stderr, shell=IS_ON_WINDOWS
-    )
+    subprocess.Popen(args=args, stdout=rc_stdout, stderr=rc_stderr, shell=IS_ON_WINDOWS)
 
 
-def wait_until_rc_is_ready():
+def wait_until_rc_is_ready() -> None:
     timeout = 300 + time.time()
     while time.time() < timeout:
         with closing(socket.socket()) as sock:
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     args = parse_args()
     rc_version = args.rc_version
     jars = args.jars
-    server_kind = ServerKind(args.server_kind)
+    server_kind = ServerKind[args.server_kind.upper()]
     use_simple_server = args.use_simple_server
     start_rc(rc_version, jars, use_simple_server, server_kind)
     wait_until_rc_is_ready()
