@@ -2,10 +2,11 @@ name: Test Python client against the released IMDG servers
 
 on:
   workflow_dispatch:
-    branch_name:
-      description: Name of the branch to test client from
-      required: true
-      default: master
+    inputs:
+      branch_name:
+        description: Name of the branch to test client from
+        required: true
+        default: master
 
 jobs:
   setup_server_matrix:
@@ -44,7 +45,7 @@ jobs:
         with:
           java-version: 8
       - name: Download JARs
-        run: python download_server_jars.py --version ${{ matrix.version }} --kind ${{ matrix.kind }} --dst jars
+        run: python download_server_jars.py --version ${{ matrix.version }} --server-kind ${{ matrix.kind }} --dst jars
       - name: Checkout to ${{ github.event.inputs.branch_name }}
         uses: actions/checkout@v2
         with:
