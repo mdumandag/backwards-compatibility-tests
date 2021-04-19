@@ -106,9 +106,9 @@ jobs:
       - name: Checkout to master
         uses: actions/checkout@v2
         with:
-          repository: hazelcast/hazelcast-python-client
+          repository: mdumandag/hazelcast-python-client
           path: master
-          ref: master
+          ref: test-ga
       - name: Checkout to tag
         uses: actions/checkout@v2
         with:
